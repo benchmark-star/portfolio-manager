@@ -912,6 +912,8 @@ describe("PortfolioManagerApi (unit coverage paths)", () => {
     await unitApi.propertyMetricsGet(11, 2024, 1, ["score"], "METRIC");
     await unitApi.propertyMetricsMonthlyGet(11, 2024, 1, ["score"]);
     await unitApi.propertyMetricsMonthlyGet(11, 2024, 1, ["score"], "METRIC");
+    await unitApi.propertyUseListGet(42);
+    await unitApi.propertyUseGet(99);
 
     expect(getSpy).toHaveBeenCalledWith("account");
     expect(getSpy).toHaveBeenCalledWith("meter/1");
@@ -929,6 +931,8 @@ describe("PortfolioManagerApi (unit coverage paths)", () => {
     expect(getSpy).toHaveBeenCalledWith(
       "/property/11/design/metrics?measurementSystem=METRIC"
     );
+    expect(getSpy).toHaveBeenCalledWith("property/42/propertyUse/list");
+    expect(getSpy).toHaveBeenCalledWith("propertyUse/99");
 
     expect(postSpy).toHaveBeenCalledWith("account/3/property", {
       property: { name: "P" },
@@ -990,7 +994,7 @@ describe("PortfolioManagerApi (unit coverage paths)", () => {
 
       // Store for subsequent tests
       pendingAccountId = testRequest.accountId;
-    }).timeout(60000);
+    }, 60000);
 
     it.skip("can get pending property share requests", async () => {
       const response = await api.sharePropertyPendingListGet();
@@ -998,7 +1002,7 @@ describe("PortfolioManagerApi (unit coverage paths)", () => {
       const testShare = response.pendingList.property;
       expect(testShare[0].propertyId).to.be.a("number");
       pendingPropertyId = testShare[0].propertyId || 0;
-    }).timeout(60000);
+    }, 60000);
 
     it.skip("can get pending meter share requests", async () => {
       const response = await api.shareMeterPendingListGet();
@@ -1006,7 +1010,7 @@ describe("PortfolioManagerApi (unit coverage paths)", () => {
       const testShare = response.pendingList.meter[0];
       expect(testShare.meterId).to.be.a("number");
       pendingMeterId = testShare.meterId;
-    }).timeout(60000);
+    }, 60000);
 
     it.skip("can accept pending shares and connections", async () => {
       if (!pendingPropertyId || !pendingMeterId) {
@@ -1028,7 +1032,7 @@ describe("PortfolioManagerApi (unit coverage paths)", () => {
       response = await api.sharePropertyPost(pendingPropertyId, acceptPayload);
       console.log("sharePropertyPost", response);
       expect(response.response["@_status"]).to.equal("Ok");
-    }).timeout(60000);
+    }, 60000);
 
     it.skip("can get notifications", async () => {
       // This test is best-effort; it depends on recent activity.
@@ -1041,7 +1045,7 @@ describe("PortfolioManagerApi (unit coverage paths)", () => {
       if (response.notificationList.notification) {
         expect(response.notificationList.notification).to.be.an("array");
       }
-    }).timeout(60000);
+    }, 60000);
 
     it.skip("can unshare and disconnect", async () => {
       if (!pendingAccountId || !pendingPropertyId || !pendingMeterId) {
@@ -1074,6 +1078,6 @@ describe("PortfolioManagerApi (unit coverage paths)", () => {
         terminatePayload
       );
       expect(response.response["@_status"]).to.equal("Ok");
-    }).timeout(60000);
+    }, 60000);
   });
 });

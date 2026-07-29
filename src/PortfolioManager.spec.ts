@@ -16,18 +16,15 @@ import { IAccount } from "./types/index.js";
 const BASE_URL = "https://portfoliomanager.energystar.gov/wstest/";
 const USERNAME = process.env.PM_USERNAME || "";
 const PASSWORD = process.env.PM_PASSWORD || "";
-if (!USERNAME || !PASSWORD) {
-  throw new Error(
-    "Please set PM_USERNAME and PM_PASSWORD environment variables"
-  );
-}
 const RUN_ID = `${Date.now()}-${Math.round(Math.random() * 1000000)}`;
 
 function withRunId(base: string): string {
   return `${base} ${RUN_ID}`;
 }
 
-describe("PortfolioManager (integration)", () => {
+const integrationDescribe = USERNAME && PASSWORD ? describe : describe.skip;
+
+integrationDescribe("PortfolioManager (integration)", () => {
   let api: PortfolioManagerApi;
   let apiSecondary: PortfolioManagerApi;
   let pm: PortfolioManager;

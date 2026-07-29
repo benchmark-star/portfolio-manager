@@ -41,6 +41,8 @@ import {
   IPropertyPropertyDeleteResponse,
   IPropertyPropertyListGetResponse,
   IPropertyPropertyPostResponse,
+  IPropertyUseGetResponse,
+  IPropertyUseListResponse,
   ISharingActionResponse,
   MeasurementSystem,
 } from "./types/index.js";
@@ -498,6 +500,22 @@ export class PortfolioManagerApi {
     buildingId: number
   ): Promise<IBuildingBuildingGetResponse> {
     return this.get<IBuildingBuildingGetResponse>(`building/${buildingId}`);
+  }
+
+  // https://portfoliomanager.energystar.gov/webservices/home/api/property/propertyUse/list
+  async propertyUseListGet(
+    propertyId: number
+  ): Promise<IPropertyUseListResponse> {
+    return this.get<IPropertyUseListResponse>(
+      `property/${propertyId}/propertyUse/list`
+    );
+  }
+
+  // https://portfoliomanager.energystar.gov/webservices/home/api/propertyUse/get
+  async propertyUseGet(
+    propertyUseId: number
+  ): Promise<IPropertyUseGetResponse> {
+    return this.get<IPropertyUseGetResponse>(`propertyUse/${propertyUseId}`);
   }
 
   /**

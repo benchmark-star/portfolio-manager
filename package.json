@@ -23,6 +23,10 @@
     "src-bin": "tsx ./src/index.ts",
     "build-bin": "node ./dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:benchmark-star/portfolio-manager.git"
+  },
   "author": {
     "name": "Darrel O'Pry"
   },

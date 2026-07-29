@@ -6,6 +6,7 @@ export * from "./enum/index.js";
 export * from "./meter/index.js";
 export * from "./property/index.js";
 export * from "./propertyUse/index.js";
+export * from "./useDetails/index.js";
 export * from "./response/index.js";
 export * from "./util.js";
 export * from "./association.js";

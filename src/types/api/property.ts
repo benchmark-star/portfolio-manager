@@ -1,6 +1,7 @@
 import {
   IBuilding,
   IProperty,
+  IPropertyUse,
   IResponse,
   PropertyMetrics,
   IPendingPropertyList,
@@ -52,4 +53,12 @@ export interface IPropertyBuildingListGetResponse extends IParsedXml {
 
 export interface IBuildingBuildingGetResponse extends IParsedXml {
   building: IBuilding;
+}
+
+export interface IPropertyUseListResponse extends IParsedXml {
+  response: IResponse;
+}
+
+export interface IPropertyUseGetResponse extends IParsedXml {
+  [useType: string]: unknown;
 }

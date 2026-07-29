@@ -19,6 +19,7 @@ import {
   IMeterData,
   IMeterDelivery,
   IProperty,
+  IPropertyUseDetail,
   isIDeliveryMeterData,
   isIEmptyResponse,
   isIMeteredMeterData,
@@ -541,6 +542,47 @@ export class PortfolioManager {
       return this.mapBuildingToClient(building);
     }
     throw new Error(`No building found:\n ${JSON.stringify(response, null, 2)}`);
+  }
+
+  async getPropertyUseDetails(
+    propertyId: number
+  ): Promise<IPropertyUseDetail[]> {
+    const response = await this.api.propertyUseListGet(propertyId);
+
+    if (!isIPopulatedResponse(response.response)) {
+      return [];
+    }
+
+    const link = response.response.links.link;
+    const links = Array.isArray(link) ? link : [link];
+
+    const details = await Promise.all(
+      links.map(async (link) => {
+        const propertyUseId = parseInt(link['@_id'] || '0', 10);
+        if (Number.isNaN(propertyUseId) || propertyUseId === 0) {
+          return null;
+        }
+
+        const useResponse = await this.api.propertyUseGet(propertyUseId);
+        const useType = Object.keys(useResponse).find(
+          (key) => key !== '?xml'
+        );
+        if (!useType) return null;
+
+        const useData = useResponse[useType] as {
+          name?: string;
+          useDetails?: { totalGrossFloorArea?: { value: number; '@_units': string } };
+        };
+
+        return {
+          name: useData?.name || useType,
+          useType,
+          totalGrossFloorArea: useData?.useDetails?.totalGrossFloorArea?.value || 0,
+        } as IPropertyUseDetail;
+      })
+    );
+
+    return details.filter((d): d is IPropertyUseDetail => d !== null);
   }
 
   private mapBuildingToClient(building: IBuilding & { id: number }): IClientBuilding {
