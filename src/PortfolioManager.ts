@@ -2,6 +2,7 @@ import {
   PortfolioManagerApi,
   isPortfolioManagerApiError,
 } from "./PortfolioManagerApi.js";
+import { mapWithConcurrency } from "./functions/mapWithConcurrency.js";
 import { parseLinkId } from "./functions/parseLinkId.js";
 import {
   IAccount,
@@ -38,6 +39,18 @@ import {
   ShareLevel,
   AcceptRejectAction,
 } from "./types/index.js";
+
+/**
+ * Options for list→detail SDK helpers that previously used unbounded
+ * `Promise.all` (one GET per link). Default concurrency is 1 (sequential)
+ * so ENERGY STAR Portfolio Manager rate limits are not instantly tripped.
+ */
+export type ListFetchOptions = {
+  concurrency?: number;
+};
+
+/** Default parallel detail GETs after listing entity links. */
+export const DEFAULT_LIST_FETCH_CONCURRENCY = 1;
 
 /**
  * A developer friendly Facade for interacting with Energy Star Portfolio Manager.
@@ -351,18 +364,20 @@ export class PortfolioManager {
     throw new Error("Failed to delete meter: " + JSON.stringify(response));
   }
 
-  async getMeters(propertyId: number): Promise<IMeter[]> {
+  async getMeters(
+    propertyId: number,
+    options: ListFetchOptions = {}
+  ): Promise<IMeter[]> {
     const links = await this.getMeterLinks(propertyId);
-    const meters = await Promise.all(
-      links.map(async (link) => {
-        const id = parseLinkId(link);
-        if (id === undefined) {
-          throw new Error(`Invalid meter id in link: ${JSON.stringify(link)}`);
-        }
-        return await this.getMeter(id);
-      })
-    );
-    return meters;
+    const concurrency =
+      options.concurrency ?? DEFAULT_LIST_FETCH_CONCURRENCY;
+    return mapWithConcurrency(links, concurrency, async (link) => {
+      const id = parseLinkId(link);
+      if (id === undefined) {
+        throw new Error(`Invalid meter id in link: ${JSON.stringify(link)}`);
+      }
+      return await this.getMeter(id);
+    });
   }
 
   async getAssociatedMeters(
@@ -421,13 +436,24 @@ export class PortfolioManager {
   }
 
   async getMetersPropertiesAssociation(
-    propertyIds: number[]
+    propertyIds: number[],
+    options: ListFetchOptions = {}
   ): Promise<IClientMeterPropertyAssociation[]> {
-    const associationPromises = propertyIds.map(async (propertyId) =>
-      this.getAssociatedMeters(propertyId)
-    );
-    const associationSettlements = await Promise.allSettled(
-      associationPromises
+    const concurrency =
+      options.concurrency ?? DEFAULT_LIST_FETCH_CONCURRENCY;
+    const associationSettlements = await mapWithConcurrency(
+      propertyIds,
+      concurrency,
+      async (propertyId) => {
+        try {
+          return {
+            status: "fulfilled" as const,
+            value: await this.getAssociatedMeters(propertyId),
+          };
+        } catch (reason) {
+          return { status: "rejected" as const, reason };
+        }
+      }
     );
     const associations: IClientMeterPropertyAssociation[] = [];
     associationSettlements.forEach((settlement) => {
@@ -495,19 +521,34 @@ export class PortfolioManager {
     return Array.isArray(link) ? link : [link];
   }
 
-  async getProperties(accountId?: number): Promise<IClientProperty[]> {
+  /**
+   * Returns property IDs for an account without fetching each property's
+   * full payload. Prefer this when callers only need IDs (e.g. import
+   * discovery) to avoid N detail GETs.
+   */
+  async getPropertyIds(accountId?: number): Promise<number[]> {
     if (!accountId) accountId = await this.getAccountId();
     const links = await this.getPropertyLinks(accountId);
-    const properties = await Promise.all(
-      links.map(async (link) => {
-        const id = parseLinkId(link);
-        if (id === undefined) {
-          throw new Error(`Invalid property id in link: ${JSON.stringify(link)}`);
-        }
-        return await this.getProperty(id);
-      })
+    return links.map((link) => {
+      const id = parseLinkId(link);
+      if (id === undefined) {
+        throw new Error(`Invalid property id in link: ${JSON.stringify(link)}`);
+      }
+      return id;
+    });
+  }
+
+  async getProperties(
+    accountId?: number,
+    options: ListFetchOptions = {}
+  ): Promise<IClientProperty[]> {
+    if (!accountId) accountId = await this.getAccountId();
+    const propertyIds = await this.getPropertyIds(accountId);
+    const concurrency =
+      options.concurrency ?? DEFAULT_LIST_FETCH_CONCURRENCY;
+    return mapWithConcurrency(propertyIds, concurrency, async (id) =>
+      this.getProperty(id)
     );
-    return properties;
   }
 
   async getBuildingLinks(propertyId: number): Promise<ILink[]> {
@@ -521,18 +562,20 @@ export class PortfolioManager {
     return Array.isArray(link) ? link : [link];
   }
 
-  async getBuildings(propertyId: number): Promise<IClientBuilding[]> {
+  async getBuildings(
+    propertyId: number,
+    options: ListFetchOptions = {}
+  ): Promise<IClientBuilding[]> {
     const links = await this.getBuildingLinks(propertyId);
-    const buildings = await Promise.all(
-      links.map(async (link) => {
-        const id = parseLinkId(link);
-        if (id === undefined) {
-          throw new Error(`Invalid building id in link: ${JSON.stringify(link)}`);
-        }
-        return await this.getBuilding(id);
-      })
-    );
-    return buildings;
+    const concurrency =
+      options.concurrency ?? DEFAULT_LIST_FETCH_CONCURRENCY;
+    return mapWithConcurrency(links, concurrency, async (link) => {
+      const id = parseLinkId(link);
+      if (id === undefined) {
+        throw new Error(`Invalid building id in link: ${JSON.stringify(link)}`);
+      }
+      return await this.getBuilding(id);
+    });
   }
 
   async getBuilding(buildingId: number): Promise<IClientBuilding> {
@@ -545,7 +588,8 @@ export class PortfolioManager {
   }
 
   async getPropertyUseDetails(
-    propertyId: number
+    propertyId: number,
+    options: ListFetchOptions = {}
   ): Promise<IPropertyUseDetail[]> {
     const response = await this.api.propertyUseListGet(propertyId);
 
@@ -555,32 +599,32 @@ export class PortfolioManager {
 
     const link = response.response.links.link;
     const links = Array.isArray(link) ? link : [link];
+    const concurrency =
+      options.concurrency ?? DEFAULT_LIST_FETCH_CONCURRENCY;
 
-    const details = await Promise.all(
-      links.map(async (link) => {
-        const propertyUseId = parseInt(link['@_id'] || '0', 10);
-        if (Number.isNaN(propertyUseId) || propertyUseId === 0) {
-          return null;
-        }
+    const details = await mapWithConcurrency(links, concurrency, async (link) => {
+      const propertyUseId = parseInt(link['@_id'] || '0', 10);
+      if (Number.isNaN(propertyUseId) || propertyUseId === 0) {
+        return null;
+      }
 
-        const useResponse = await this.api.propertyUseGet(propertyUseId);
-        const useType = Object.keys(useResponse).find(
-          (key) => key !== '?xml'
-        );
-        if (!useType) return null;
+      const useResponse = await this.api.propertyUseGet(propertyUseId);
+      const useType = Object.keys(useResponse).find(
+        (key) => key !== '?xml'
+      );
+      if (!useType) return null;
 
-        const useData = useResponse[useType] as {
-          name?: string;
-          useDetails?: { totalGrossFloorArea?: { value: number; '@_units': string } };
-        };
+      const useData = useResponse[useType] as {
+        name?: string;
+        useDetails?: { totalGrossFloorArea?: { value: number; '@_units': string } };
+      };
 
-        return {
-          name: useData?.name || useType,
-          useType,
-          totalGrossFloorArea: useData?.useDetails?.totalGrossFloorArea?.value || 0,
-        } as IPropertyUseDetail;
-      })
-    );
+      return {
+        name: useData?.name || useType,
+        useType,
+        totalGrossFloorArea: useData?.useDetails?.totalGrossFloorArea?.value || 0,
+      } as IPropertyUseDetail;
+    });
 
     return details.filter((d): d is IPropertyUseDetail => d !== null);
   }

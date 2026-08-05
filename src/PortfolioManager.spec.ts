@@ -530,6 +530,59 @@ describe("PortfolioManager (minimal synthetic edge cases)", () => {
     await expect(pm.getProperties(1)).rejects.toThrow("Invalid property id in link");
   });
 
+  it("getPropertyIds returns ids without fetching property details", async () => {
+    const api = createMinimalMockApi();
+    const pm = new PortfolioManager(api);
+
+    vi.spyOn(pm, "getPropertyLinks").mockResolvedValue([
+      {
+        "@_id": "6",
+        "@_link": "/property/6",
+        "@_linkDescription": "This is the GET url for this Property.",
+        "@_httpMethod": "GET",
+      },
+      {
+        "@_id": "7",
+        "@_link": "/property/7",
+        "@_linkDescription": "This is the GET url for this Property.",
+        "@_httpMethod": "GET",
+      },
+    ] as never);
+    const getProperty = vi.spyOn(pm, "getProperty");
+
+    await expect(pm.getPropertyIds(1)).resolves.toEqual([6, 7]);
+    expect(getProperty).not.toHaveBeenCalled();
+  });
+
+  it("getProperties fetches property details with bounded concurrency", async () => {
+    const api = createMinimalMockApi();
+    const pm = new PortfolioManager(api);
+
+    vi.spyOn(pm, "getPropertyLinks").mockResolvedValue(
+      [10, 11, 12].map((id) => ({
+        "@_id": String(id),
+        "@_link": `/property/${id}`,
+        "@_linkDescription": "This is the GET url for this Property.",
+        "@_httpMethod": "GET",
+      })) as never
+    );
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.spyOn(pm, "getProperty").mockImplementation(async (id: number) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      inFlight--;
+      return { id } as never;
+    });
+
+    await expect(
+      pm.getProperties(1, { concurrency: 2 })
+    ).resolves.toEqual([{ id: 10 }, { id: 11 }, { id: 12 }]);
+    expect(maxInFlight).toBeLessThanOrEqual(2);
+  });
+
   it("getAccountId + getMeter throw when payloads are missing required objects", async () => {
     const api = createExtendedMockApi();
     const pm = new PortfolioManager(api);
